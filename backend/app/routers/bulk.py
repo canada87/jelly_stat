@@ -1,9 +1,12 @@
 import asyncio
+import logging
 
 from fastapi import APIRouter, Request
 
 from app.config import settings
 from app.models import BulkEditRequest, BulkEditResult
+
+logger = logging.getLogger("jelly_stat.bulk")
 
 router = APIRouter(prefix="/api/movies", tags=["bulk"])
 
@@ -33,6 +36,7 @@ async def _edit_one(request: Request, item_id: str, body: BulkEditRequest, sem: 
             await jellyfin.update_item_raw(item_id, dto)
             return BulkEditResult(item_id=item_id, ok=True)
         except Exception as exc:  # noqa: BLE001 - surface per-item error to the caller
+            logger.exception("bulk edit failed for item %s", item_id)
             return BulkEditResult(item_id=item_id, ok=False, error=str(exc))
 
 

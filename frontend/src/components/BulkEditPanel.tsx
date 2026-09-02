@@ -73,10 +73,20 @@ export default function BulkEditPanel({ selectedIds, onApplied }: Props) {
         {busy ? "Applying..." : "Apply to selection"}
       </button>
       {results && (
-        <p>
-          {results.length - failures.length}/{results.length} applied successfully.
-          {failures.length > 0 && ` Failures: ${failures.map((f) => f.item_id).join(", ")}`}
-        </p>
+        <div>
+          <p>
+            {results.length - failures.length}/{results.length} applied successfully.
+          </p>
+          {failures.length > 0 && (
+            <ul className="bulk-edit-errors">
+              {failures.map((f) => (
+                <li key={f.item_id}>
+                  <code>{f.item_id}</code>: {f.error}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       )}
     </div>
   );

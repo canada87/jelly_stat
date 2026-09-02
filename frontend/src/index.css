@@ -71,6 +71,13 @@ section {
   user-select: none;
 }
 
+.bulk-edit-errors {
+  color: #ff6b6b;
+  font-size: 0.85rem;
+  margin: 0;
+  padding-left: 1.2rem;
+}
+
 .bulk-edit-panel {
   display: flex;
   flex-direction: column;
