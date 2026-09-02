@@ -1,0 +1,15 @@
+.idea/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+backend/.env
+
+# Node / frontend build
+node_modules/
+frontend/dist/
+backend/static/
+
+# env
+.env
