@@ -20,6 +20,16 @@ class JellyfinClient:
     async def aclose(self) -> None:
         await self._client.aclose()
 
+    @staticmethod
+    def _raise_for_status(resp: httpx.Response) -> None:
+        if resp.is_success:
+            return
+        # Jellyfin puts the actual .NET exception message in the response body;
+        # httpx's default raise_for_status() message discards it.
+        raise RuntimeError(
+            f"Jellyfin {resp.request.method} {resp.request.url} -> {resp.status_code}: {resp.text[:2000]}"
+        )
+
     async def _get_admin_user_id(self) -> str:
         if self._admin_user_id is not None:
             return self._admin_user_id
@@ -27,7 +37,7 @@ class JellyfinClient:
             if self._admin_user_id is not None:
                 return self._admin_user_id
             resp = await self._client.get("/Users")
-            resp.raise_for_status()
+            self._raise_for_status(resp)
             users = resp.json()
             if not users:
                 raise RuntimeError("No Jellyfin users found for the configured API key")
@@ -58,16 +68,20 @@ class JellyfinClient:
                 "Fields": "Tags,DateCreated,ProviderIds",
             },
         )
-        resp.raise_for_status()
+        self._raise_for_status(resp)
         data = resp.json()
         return [self._to_movie(item) for item in data.get("Items", [])]
 
     async def get_item_raw(self, item_id: str) -> dict[str, Any]:
         user_id = await self._get_admin_user_id()
         resp = await self._client.get(f"/Users/{user_id}/Items/{item_id}")
-        resp.raise_for_status()
+        self._raise_for_status(resp)
         return resp.json()
 
     async def update_item_raw(self, item_id: str, dto: dict[str, Any]) -> None:
+        # UserData is per-user watch state that leaks in from the user-scoped GET;
+        # Trickplay has a known server-side deserialization bug. Neither belongs in
+        # an update payload, and both have been observed to make this endpoint 500.
+        dto = {k: v for k, v in dto.items() if k not in ("UserData", "Trickplay")}
         resp = await self._client.post(f"/Items/{item_id}", json=dto)
-        resp.raise_for_status()
+        self._raise_for_status(resp)
