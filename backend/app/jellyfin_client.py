@@ -78,6 +78,15 @@ class JellyfinClient:
         self._raise_for_status(resp)
         return resp.json()
 
+    async def get_primary_image(self, item_id: str, max_height: int = 300) -> tuple[bytes, str]:
+        resp = await self._client.get(
+            f"/Items/{item_id}/Images/Primary",
+            params={"maxHeight": max_height, "quality": 90},
+        )
+        self._raise_for_status(resp)
+        content_type = resp.headers.get("content-type", "image/jpeg")
+        return resp.content, content_type
+
     async def update_item_raw(self, item_id: str, dto: dict[str, Any]) -> None:
         # UserData is per-user watch state that leaks in from the user-scoped GET;
         # Trickplay has a known server-side deserialization bug. Neither belongs in

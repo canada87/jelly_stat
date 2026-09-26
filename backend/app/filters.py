@@ -4,6 +4,10 @@ from app.models import FilterCondition, FilterGroup, FilterNode, Movie
 
 
 def _eval_condition(cond: FilterCondition, movie: Movie) -> bool:
+    if cond.field == "name":
+        contains = cond.value.lower() in movie.name.lower()
+        return contains if cond.op == "include" else not contains
+
     if cond.field == "tags":
         has_tag = cond.value.lower() in (t.lower() for t in movie.tags)
         return has_tag if cond.op == "include" else not has_tag

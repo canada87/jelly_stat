@@ -71,6 +71,15 @@ section {
   user-select: none;
 }
 
+.movie-cover {
+  width: 45px;
+  height: 68px;
+  object-fit: cover;
+  border-radius: 4px;
+  background: #2a2d35;
+  display: block;
+}
+
 .bulk-edit-errors {
   color: #ff6b6b;
   font-size: 0.85rem;

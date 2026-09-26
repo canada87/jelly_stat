@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { movieImageUrl } from "../api/client";
 import type { Movie } from "../types";
 
 type SortKey = "name" | "official_rating" | "date_created";
@@ -53,6 +54,7 @@ export default function MovieTable({ movies, selected, onSelectionChange }: Prop
           <th>
             <input type="checkbox" checked={allSelected} onChange={toggleAll} />
           </th>
+          <th>Cover</th>
           <th onClick={() => toggleSort("name")}>Name</th>
           <th>Tags</th>
           <th onClick={() => toggleSort("official_rating")}>Parental rating</th>
@@ -64,6 +66,17 @@ export default function MovieTable({ movies, selected, onSelectionChange }: Prop
           <tr key={m.id}>
             <td>
               <input type="checkbox" checked={selected.has(m.id)} onChange={() => toggleOne(m.id)} />
+            </td>
+            <td>
+              <img
+                className="movie-cover"
+                src={movieImageUrl(m.id)}
+                alt=""
+                loading="lazy"
+                onError={(e) => {
+                  e.currentTarget.style.visibility = "hidden";
+                }}
+              />
             </td>
             <td>{m.name}</td>
             <td>{m.tags.join(", ")}</td>

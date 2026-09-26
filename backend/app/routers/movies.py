@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import Response
 
 from app.filters import apply_filter
 from app.models import FilterRequest, Movie
@@ -24,5 +25,14 @@ async def list_movies(request: Request, refresh: bool = False) -> list[Movie]:
 
 @router.post("/filter", response_model=list[Movie])
 async def filter_movies(request: Request, body: FilterRequest) -> list[Movie]:
-    movies = await _get_movies(request)
+    movies = await _get_movies(request, force_refresh=body.refresh)
     return apply_filter(body.filter, movies)
+
+
+@router.get("/{item_id}/image")
+async def get_movie_image(request: Request, item_id: str) -> Response:
+    try:
+        content, content_type = await request.app.state.jellyfin.get_primary_image(item_id)
+    except RuntimeError:
+        raise HTTPException(status_code=404, detail="Image not found")
+    return Response(content=content, media_type=content_type, headers={"Cache-Control": "public, max-age=86400"})

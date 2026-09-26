@@ -1,4 +1,4 @@
-export type FilterField = "tags" | "officialRating" | "dateCreated";
+export type FilterField = "name" | "tags" | "officialRating" | "dateCreated";
 export type ConditionOp = "include" | "exclude" | "before" | "after" | "on";
 
 export interface FilterCondition {
@@ -43,5 +43,5 @@ export function newGroup(operator: "AND" | "OR" = "AND"): FilterGroup {
 }
 
 export function newCondition(): FilterCondition {
-  return { kind: "condition", field: "tags", op: "include", value: "" };
+  return { kind: "condition", field: "name", op: "include", value: "" };
 }

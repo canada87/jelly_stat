@@ -7,7 +7,7 @@ interface Props {
   onRemove?: () => void;
 }
 
-const FIELD_OPTIONS: FilterField[] = ["tags", "officialRating", "dateCreated"];
+const FIELD_OPTIONS: FilterField[] = ["name", "tags", "officialRating", "dateCreated"];
 
 function opsForField(field: FilterField): ConditionOp[] {
   return field === "dateCreated" ? ["before", "after", "on"] : ["include", "exclude"];
@@ -51,7 +51,13 @@ function ConditionRow({
       ) : (
         <input
           type="text"
-          placeholder={node.field === "tags" ? "tag name" : "rating (e.g. PG-13)"}
+          placeholder={
+            node.field === "name"
+              ? "part of the movie name"
+              : node.field === "tags"
+                ? "tag name"
+                : "rating (e.g. PG-13)"
+          }
           value={node.value}
           onChange={(e) => onChange({ ...node, value: e.target.value })}
         />

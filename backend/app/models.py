@@ -14,7 +14,7 @@ class Movie(BaseModel):
 
 class FilterCondition(BaseModel):
     kind: Literal["condition"] = "condition"
-    field: Literal["tags", "officialRating", "dateCreated"]
+    field: Literal["name", "tags", "officialRating", "dateCreated"]
     op: Literal["include", "exclude", "before", "after", "on"]
     value: str
 
@@ -31,6 +31,7 @@ FilterGroup.model_rebuild()
 
 class FilterRequest(BaseModel):
     filter: Optional[FilterNode] = None
+    refresh: bool = False
 
 
 class BulkEditRequest(BaseModel):

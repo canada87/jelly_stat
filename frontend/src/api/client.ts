@@ -8,16 +8,16 @@ async function handle<T>(res: Response): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-export function getMovies(refresh = false): Promise<Movie[]> {
-  return fetch(`/api/movies${refresh ? "?refresh=true" : ""}`).then((r) => handle<Movie[]>(r));
-}
-
-export function filterMovies(filter: FilterNode | null): Promise<Movie[]> {
+export function filterMovies(filter: FilterNode | null, refresh = false): Promise<Movie[]> {
   return fetch("/api/movies/filter", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ filter }),
+    body: JSON.stringify({ filter, refresh }),
   }).then((r) => handle<Movie[]>(r));
+}
+
+export function movieImageUrl(itemId: string): string {
+  return `/api/movies/${itemId}/image`;
 }
 
 export function bulkEdit(request: BulkEditRequest): Promise<BulkEditResult[]> {
