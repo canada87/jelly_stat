@@ -8,11 +8,20 @@ async function handle<T>(res: Response): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+function stripIds(node: FilterNode): unknown {
+  if (node.kind === "group") {
+    const { id: _id, children, ...rest } = node;
+    return { ...rest, children: children.map(stripIds) };
+  }
+  const { id: _id, ...rest } = node;
+  return rest;
+}
+
 export function filterMovies(filter: FilterNode | null, refresh = false): Promise<Movie[]> {
   return fetch("/api/movies/filter", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ filter, refresh }),
+    body: JSON.stringify({ filter: filter ? stripIds(filter) : null, refresh }),
   }).then((r) => handle<Movie[]>(r));
 }
 

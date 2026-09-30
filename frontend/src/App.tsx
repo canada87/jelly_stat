@@ -2,20 +2,21 @@ import { useState } from "react";
 import { filterMovies } from "./api/client";
 import BulkEditPanel from "./components/BulkEditPanel";
 import FilterBuilder from "./components/FilterBuilder";
+import { IconAlert, IconRefresh, IconSearch, Spinner } from "./components/Icons";
 import MovieTable from "./components/MovieTable";
 import type { FilterGroup, Movie } from "./types";
 import { newGroup } from "./types";
 
 export default function App() {
   const [movies, setMovies] = useState<Movie[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState<"search" | "refresh" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<FilterGroup>(newGroup("AND"));
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [hasSearched, setHasSearched] = useState(false);
 
   const search = async (refresh = false) => {
-    setLoading(true);
+    setLoading(refresh ? "refresh" : "search");
     setError(null);
     try {
       const data = await filterMovies(filter.children.length > 0 ? filter : null, refresh);
@@ -25,44 +26,88 @@ export default function App() {
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
-      setLoading(false);
+      setLoading(null);
     }
   };
 
+  const busy = loading !== null;
+
   return (
-    <div className="app">
-      <header>
-        <h1>jelly_stat</h1>
-        <button type="button" onClick={() => search(true)} disabled={loading}>
-          Refresh from Jellyfin
-        </button>
-      </header>
+    <>
+      <a className="skip-link" href="#results">
+        Skip to results
+      </a>
+      <div className="app">
+        <header className="app-header">
+          <h1>jelly_stat</h1>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() => search(true)}
+            disabled={busy}
+            title="Reload the movie list from Jellyfin, bypassing the cache"
+          >
+            {loading === "refresh" ? <Spinner /> : <IconRefresh />}
+            Refresh from Jellyfin
+          </button>
+        </header>
 
-      <section>
-        <h2>Filters</h2>
-        <FilterBuilder node={filter} onChange={setFilter} />
-        <button type="button" onClick={() => search(false)} disabled={loading}>
-          Search
-        </button>
-        <p>Leave the filters empty and search to see every movie.</p>
-      </section>
+        <main>
+          <section aria-labelledby="filters-title">
+            <h2 id="filters-title">Filters</h2>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                search(false);
+              }}
+            >
+              <FilterBuilder node={filter} onChange={setFilter} />
+              <div className="form-actions">
+                <button type="submit" className="btn btn-primary" disabled={busy}>
+                  {loading === "search" ? <Spinner /> : <IconSearch />}
+                  Search
+                </button>
+                <span className="muted">Leave the filters empty to list every movie.</span>
+              </div>
+            </form>
+          </section>
 
-      {error && <p className="error">{error}</p>}
-      {loading && <p>Loading...</p>}
+          {error && (
+            <p className="alert alert-error" role="alert">
+              <IconAlert /> <span>{error}</span>
+              <button type="button" className="btn btn-secondary btn-sm" onClick={() => search(false)} disabled={busy}>
+                Retry
+              </button>
+            </p>
+          )}
 
-      <section>
-        <h2>Movies {hasSearched ? `(${movies.length})` : ""}</h2>
-        {hasSearched ? (
-          <MovieTable movies={movies} selected={selected} onSelectionChange={setSelected} />
-        ) : (
-          <p>Choose a filter (or none) and press Search to see movies.</p>
-        )}
-      </section>
+          <section id="results" aria-labelledby="results-title" aria-busy={busy}>
+            <h2 id="results-title">
+              Movies
+              {hasSearched && <span className="count">{movies.length}</span>}
+            </h2>
+            {busy && !hasSearched ? (
+              <div className="skeleton-list" aria-label="Loading movies" role="status">
+                {Array.from({ length: 6 }, (_, i) => (
+                  <div key={i} className="skeleton-row" />
+                ))}
+              </div>
+            ) : hasSearched ? (
+              <div className={busy ? "is-loading" : undefined}>
+                <MovieTable movies={movies} selected={selected} onSelectionChange={setSelected} />
+              </div>
+            ) : (
+              <p className="muted">Set up your filters (or none) and press Search to see movies.</p>
+            )}
+          </section>
+        </main>
+      </div>
 
-      <section>
-        <h2>Bulk edit</h2>
-        <BulkEditPanel selectedIds={[...selected]} onApplied={() => search(true)} />
-      </section>
-    </div>
+      <BulkEditPanel
+        selectedIds={[...selected]}
+        onClear={() => setSelected(new Set())}
+        onApplied={() => search(true)}
+      />
+    </>
   );
 }

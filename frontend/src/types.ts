@@ -3,6 +3,8 @@ export type ConditionOp = "include" | "exclude" | "before" | "after" | "on";
 
 export interface FilterCondition {
   kind: "condition";
+  /** UI-only stable React key; stripped before sending to the API. */
+  id: string;
   field: FilterField;
   op: ConditionOp;
   value: string;
@@ -10,6 +12,8 @@ export interface FilterCondition {
 
 export interface FilterGroup {
   kind: "group";
+  /** UI-only stable React key; stripped before sending to the API. */
+  id: string;
   operator: "AND" | "OR";
   children: FilterNode[];
 }
@@ -38,10 +42,13 @@ export interface BulkEditResult {
   error: string | null;
 }
 
+let nextId = 0;
+const uid = () => `n${++nextId}`;
+
 export function newGroup(operator: "AND" | "OR" = "AND"): FilterGroup {
-  return { kind: "group", operator, children: [] };
+  return { kind: "group", id: uid(), operator, children: [] };
 }
 
 export function newCondition(): FilterCondition {
-  return { kind: "condition", field: "name", op: "include", value: "" };
+  return { kind: "condition", id: uid(), field: "name", op: "include", value: "" };
 }
