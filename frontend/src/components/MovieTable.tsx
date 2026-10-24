@@ -170,7 +170,7 @@ export default function MovieTable({ movies, selected, onSelectionChange }: Prop
                         ))}
                       </ul>
                     ) : (
-                      <span className="muted">�</span>
+                      <span className="muted">—</span>
                     )}
                   </td>
                   <td>{m.official_rating ?? <span className="muted">—</span>}</td>

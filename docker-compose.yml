@@ -8,3 +8,4 @@ services:
     environment:
       JELLYFIN_URL: ${JELLYFIN_URL}
       JELLYFIN_API_KEY: ${JELLYFIN_API_KEY}
+      MCP_TOKEN: ${MCP_TOKEN:-}

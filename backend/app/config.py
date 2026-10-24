@@ -9,6 +9,8 @@ class Settings(BaseSettings):
     port: int = 8080
     cache_ttl_seconds: int = 30
     max_concurrent_updates: int = 5
+    # When set, MCP clients must send "Authorization: Bearer <token>".
+    mcp_token: str | None = None
 
 
 settings = Settings()
