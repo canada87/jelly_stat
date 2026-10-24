@@ -20,6 +20,16 @@ docker compose up --build
 
 Then open `http://<host>:8080`.
 
+### Prebuilt image
+
+Pushing a git tag (e.g. `git tag v1.0.0 && git push origin v1.0.0`) runs a GitHub Action that
+publishes the image to `ghcr.io/canada87/jelly_stat`, tagged with the git tag and `latest`. To use
+it instead of building locally, replace `build: .` in `docker-compose.yml` with:
+
+```yaml
+    image: ghcr.io/canada87/jelly_stat:latest
+```
+
 **Security note:** the service has no login of its own. Only expose it on your homelab's internal
 network (or behind your own reverse proxy / VPN) — do not expose it to the internet.
 
