@@ -112,6 +112,7 @@ export default function MovieTable({ movies, selected, onSelectionChange }: Prop
               </th>
               {sortHeader("name", "Name")}
               <th scope="col">Tags</th>
+              <th scope="col">Collections</th>
               {sortHeader("official_rating", "Parental rating")}
               {sortHeader("date_created", "Added on")}
             </tr>
@@ -157,6 +158,19 @@ export default function MovieTable({ movies, selected, onSelectionChange }: Prop
                       </ul>
                     ) : (
                       <span className="muted">—</span>
+                    )}
+                  </td>
+                  <td>
+                    {m.collections.length > 0 ? (
+                      <ul className="chips">
+                        {m.collections.map((c) => (
+                          <li key={c.id} className="chip chip-collection">
+                            {c.name}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <span className="muted">�</span>
                     )}
                   </td>
                   <td>{m.official_rating ?? <span className="muted">—</span>}</td>

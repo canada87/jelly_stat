@@ -1,10 +1,11 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { bulkEdit } from "../api/client";
-import type { BulkEditResult } from "../types";
-import { IconAlert, IconCheck, IconClose, IconEdit, Spinner } from "./Icons";
+import type { BulkEditResponse, Collection, CollectionEditResult, Movie } from "../types";
+import { IconAlert, IconCheck, IconClose, IconEdit, IconPlus, Spinner } from "./Icons";
 
 interface Props {
-  selectedIds: string[];
+  selectedMovies: Movie[];
+  collections: Collection[];
   onClear: () => void;
   onApplied: () => void;
 }
@@ -19,7 +20,14 @@ const splitTags = (s: string) =>
 
 const plural = (n: number) => `${n} movie${n === 1 ? "" : "s"}`;
 
-export default function BulkEditPanel({ selectedIds, onClear, onApplied }: Props) {
+const ACTION_LABELS: Record<CollectionEditResult["action"], string> = {
+  add: "Add to",
+  remove: "Remove from",
+  create: "Create",
+};
+
+export default function BulkEditPanel({ selectedMovies, collections, onClear, onApplied }: Props) {
+  const selectedIds = selectedMovies.map((m) => m.id);
   const dialogRef = useRef<HTMLDialogElement>(null);
   const titleId = useId();
   const [open, setOpen] = useState(false);
@@ -28,8 +36,12 @@ export default function BulkEditPanel({ selectedIds, onClear, onApplied }: Props
   const [removeTags, setRemoveTags] = useState("");
   const [changeRating, setChangeRating] = useState(false);
   const [rating, setRating] = useState("");
+  // Collection names typed by the user: existing ones are added to, unknown ones are created.
+  const [addCollections, setAddCollections] = useState<string[]>([]);
+  const [collectionInput, setCollectionInput] = useState("");
+  const [removeCollectionIds, setRemoveCollectionIds] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
-  const [results, setResults] = useState<BulkEditResult[] | null>(null);
+  const [results, setResults] = useState<BulkEditResponse | null>(null);
   const [requestError, setRequestError] = useState<string | null>(null);
   // Selection is cleared after a successful apply; keep the count for the result screen.
   const [targetCount, setTargetCount] = useState(0);
@@ -37,7 +49,30 @@ export default function BulkEditPanel({ selectedIds, onClear, onApplied }: Props
   const count = open ? targetCount : selectedIds.length;
   const add = splitTags(addTags);
   const remove = splitTags(removeTags);
-  const hasChanges = add.length > 0 || remove.length > 0 || changeRating;
+
+  const collectionByName = useMemo(
+    () => new Map(collections.map((c) => [c.name.toLowerCase(), c])),
+    [collections]
+  );
+  const existingToAdd = addCollections.flatMap((n) => collectionByName.get(n.toLowerCase()) ?? []);
+  const newToCreate = addCollections.filter((n) => !collectionByName.has(n.toLowerCase()));
+
+  // Collections at least one selected movie belongs to, with how many of the selection are in each.
+  const removable = useMemo(() => {
+    const counts = new Map<string, { id: string; name: string; count: number }>();
+    for (const m of selectedMovies) {
+      for (const c of m.collections) {
+        const entry = counts.get(c.id) ?? { ...c, count: 0 };
+        entry.count++;
+        counts.set(c.id, entry);
+      }
+    }
+    return [...counts.values()].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+  }, [selectedMovies]);
+  const toRemove = removable.filter((c) => removeCollectionIds.has(c.id));
+
+  const hasChanges =
+    add.length > 0 || remove.length > 0 || changeRating || addCollections.length > 0 || toRemove.length > 0;
 
   useEffect(() => {
     const d = dialogRef.current;
@@ -59,6 +94,27 @@ export default function BulkEditPanel({ selectedIds, onClear, onApplied }: Props
     setOpen(false);
   };
 
+  const pushCollection = () => {
+    const name = collectionInput.trim();
+    if (!name) return;
+    // Use the existing collection's exact spelling when the name matches one case-insensitively.
+    const canonical = collectionByName.get(name.toLowerCase())?.name ?? name;
+    if (!addCollections.some((n) => n.toLowerCase() === canonical.toLowerCase())) {
+      setAddCollections([...addCollections, canonical]);
+    }
+    setCollectionInput("");
+  };
+
+  const toggleRemove = (id: string) => {
+    const next = new Set(removeCollectionIds);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setRemoveCollectionIds(next);
+  };
+
+  const collectionName = (r: CollectionEditResult) =>
+    r.collection_name ?? collections.find((c) => c.id === r.collection_id)?.name ?? r.collection_id ?? "?";
+
   const apply = async () => {
     setBusy(true);
     setRequestError(null);
@@ -69,6 +125,9 @@ export default function BulkEditPanel({ selectedIds, onClear, onApplied }: Props
         remove_tags: remove,
         official_rating: rating,
         change_rating: changeRating,
+        add_to_collections: existingToAdd.map((c) => c.id),
+        new_collections: newToCreate,
+        remove_from_collections: toRemove.map((c) => c.id),
       });
       setResults(res);
       setStep("result");
@@ -76,6 +135,9 @@ export default function BulkEditPanel({ selectedIds, onClear, onApplied }: Props
       setRemoveTags("");
       setChangeRating(false);
       setRating("");
+      setAddCollections([]);
+      setCollectionInput("");
+      setRemoveCollectionIds(new Set());
       onApplied();
     } catch (e) {
       setRequestError(e instanceof Error ? e.message : String(e));
@@ -85,7 +147,9 @@ export default function BulkEditPanel({ selectedIds, onClear, onApplied }: Props
     }
   };
 
-  const failures = results?.filter((r) => !r.ok) ?? [];
+  const failures = results?.items.filter((r) => !r.ok) ?? [];
+  const collectionFailures = results?.collections.filter((r) => !r.ok) ?? [];
+  const allOk = failures.length === 0 && collectionFailures.length === 0;
 
   return (
     <>
@@ -188,6 +252,77 @@ export default function BulkEditPanel({ selectedIds, onClear, onApplied }: Props
                 Leave empty to clear the rating.
               </span>
             </fieldset>
+            <fieldset className="field">
+              <legend>Collections</legend>
+              <label htmlFor={`${titleId}-col`} className="sub-label">
+                Add to collections
+              </label>
+              <div className="inline-input">
+                <input
+                  id={`${titleId}-col`}
+                  list="collection-names"
+                  value={collectionInput}
+                  onChange={(e) => setCollectionInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      pushCollection();
+                    }
+                  }}
+                  placeholder="Existing or new collection name"
+                  aria-describedby={`${titleId}-col-help`}
+                />
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={pushCollection}
+                  disabled={!collectionInput.trim()}
+                >
+                  <IconPlus /> Add
+                </button>
+              </div>
+              <span id={`${titleId}-col-help`} className="help">
+                A name that doesn't match an existing collection creates a new one.
+              </span>
+              {addCollections.length > 0 && (
+                <ul className="chips" aria-label="Collections to add to">
+                  {addCollections.map((n) => (
+                    <li key={n} className="chip chip-removable">
+                      {n}
+                      {!collectionByName.has(n.toLowerCase()) && <span className="chip-badge">new</span>}
+                      <button
+                        type="button"
+                        className="chip-remove"
+                        onClick={() => setAddCollections(addCollections.filter((x) => x !== n))}
+                        aria-label={`Don't add to ${n}`}
+                      >
+                        <IconClose />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <span className="sub-label">Remove from collections</span>
+              {removable.length === 0 ? (
+                <span className="help">None of the selected movies is in a collection.</span>
+              ) : (
+                <div className="check-list">
+                  {removable.map((c) => (
+                    <label key={c.id} className="check">
+                      <input
+                        type="checkbox"
+                        checked={removeCollectionIds.has(c.id)}
+                        onChange={() => toggleRemove(c.id)}
+                      />
+                      {c.name}
+                      <span className="muted">
+                        ({c.count} of {count} selected)
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </fieldset>
             <div className="dialog-footer">
               <button type="button" className="btn btn-ghost" onClick={closeDialog}>
                 Cancel
@@ -226,6 +361,21 @@ export default function BulkEditPanel({ selectedIds, onClear, onApplied }: Props
                   )}
                 </li>
               )}
+              {toRemove.map((c) => (
+                <li key={`rm-${c.id}`}>
+                  Remove from collection <b>{c.name}</b>
+                </li>
+              ))}
+              {existingToAdd.map((c) => (
+                <li key={`add-${c.id}`}>
+                  Add to collection <b>{c.name}</b>
+                </li>
+              ))}
+              {newToCreate.map((n) => (
+                <li key={`new-${n}`}>
+                  Create collection <b>{n}</b> with these movies
+                </li>
+              ))}
             </ul>
             <p className="alert alert-warn">
               <IconAlert /> <span>These changes are written to Jellyfin and cannot be undone from here.</span>
@@ -244,10 +394,13 @@ export default function BulkEditPanel({ selectedIds, onClear, onApplied }: Props
 
         {step === "result" && results && (
           <div className="dialog-body" aria-live="polite">
-            <p className={`alert ${failures.length === 0 ? "alert-ok" : "alert-warn"}`}>
-              {failures.length === 0 ? <IconCheck /> : <IconAlert />}
+            <p className={`alert ${allOk ? "alert-ok" : "alert-warn"}`}>
+              {allOk ? <IconCheck /> : <IconAlert />}
               <span>
-                {results.length - failures.length} of {results.length} applied successfully.
+                {results.items.length > 0 &&
+                  `Metadata: ${results.items.length - failures.length} of ${results.items.length} applied successfully. `}
+                {results.collections.length > 0 &&
+                  `Collections: ${results.collections.length - collectionFailures.length} of ${results.collections.length} changes applied.`}
               </span>
             </p>
             {failures.length > 0 && (
@@ -255,6 +408,15 @@ export default function BulkEditPanel({ selectedIds, onClear, onApplied }: Props
                 {failures.map((f) => (
                   <li key={f.item_id}>
                     <code>{f.item_id}</code>: {f.error}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {collectionFailures.length > 0 && (
+              <ul className="bulk-edit-errors">
+                {collectionFailures.map((f, i) => (
+                  <li key={i}>
+                    {ACTION_LABELS[f.action]} <b>{collectionName(f)}</b>: {f.error}
                   </li>
                 ))}
               </ul>

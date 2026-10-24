@@ -1,4 +1,4 @@
-import type { BulkEditRequest, BulkEditResult, FilterNode, Movie } from "../types";
+import type { BulkEditRequest, BulkEditResponse, Collection, FilterNode, Movie } from "../types";
 
 async function handle<T>(res: Response): Promise<T> {
   if (!res.ok) {
@@ -29,10 +29,14 @@ export function movieImageUrl(itemId: string): string {
   return `/api/movies/${itemId}/image`;
 }
 
-export function bulkEdit(request: BulkEditRequest): Promise<BulkEditResult[]> {
+export function getCollections(): Promise<Collection[]> {
+  return fetch("/api/collections").then((r) => handle<Collection[]>(r));
+}
+
+export function bulkEdit(request: BulkEditRequest): Promise<BulkEditResponse> {
   return fetch("/api/movies/bulk-edit", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(request),
-  }).then((r) => handle<BulkEditResult[]>(r));
+  }).then((r) => handle<BulkEditResponse>(r));
 }

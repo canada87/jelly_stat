@@ -2,20 +2,24 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response
 
 from app.filters import apply_filter
-from app.models import FilterRequest, Movie
+from app.models import FilterRequest, Library, Movie
 
 router = APIRouter(prefix="/api/movies", tags=["movies"])
 
 
-async def _get_movies(request: Request, force_refresh: bool = False) -> list[Movie]:
-    cache = request.app.state.movie_cache
+async def get_library(request: Request, force_refresh: bool = False) -> Library:
+    cache = request.app.state.library_cache
     if not force_refresh:
         cached = cache.get()
         if cached is not None:
             return cached
-    movies = await request.app.state.jellyfin.get_movies()
-    cache.set(movies)
-    return movies
+    library = await request.app.state.jellyfin.get_library()
+    cache.set(library)
+    return library
+
+
+async def _get_movies(request: Request, force_refresh: bool = False) -> list[Movie]:
+    return (await get_library(request, force_refresh)).movies
 
 
 @router.get("", response_model=list[Movie])

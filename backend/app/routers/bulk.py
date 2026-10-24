@@ -1,10 +1,11 @@
 import asyncio
 import logging
+from typing import Awaitable, Callable, Optional
 
 from fastapi import APIRouter, Request
 
 from app.config import settings
-from app.models import BulkEditRequest, BulkEditResult
+from app.models import BulkEditRequest, BulkEditResponse, BulkEditResult, CollectionEditResult
 
 logger = logging.getLogger("jelly_stat.bulk")
 
@@ -40,11 +41,57 @@ async def _edit_one(request: Request, item_id: str, body: BulkEditRequest, sem: 
             return BulkEditResult(item_id=item_id, ok=False, error=str(exc))
 
 
-@router.post("/bulk-edit", response_model=list[BulkEditResult])
-async def bulk_edit(request: Request, body: BulkEditRequest) -> list[BulkEditResult]:
-    sem = asyncio.Semaphore(settings.max_concurrent_updates)
-    results = await asyncio.gather(
-        *(_edit_one(request, item_id, body, sem) for item_id in body.item_ids)
-    )
-    request.app.state.movie_cache.invalidate()
-    return list(results)
+def _has_item_edits(body: BulkEditRequest) -> bool:
+    return bool(body.add_tags or body.remove_tags or body.change_rating)
+
+
+async def _collection_op(
+    action: str,
+    collection_id: Optional[str],
+    collection_name: Optional[str],
+    op: Callable[[], Awaitable[object]],
+) -> CollectionEditResult:
+    try:
+        result = await op()
+        if action == "create":
+            collection_id = str(result)
+        return CollectionEditResult(
+            action=action, collection_id=collection_id, collection_name=collection_name, ok=True
+        )
+    except Exception as exc:  # noqa: BLE001 - surface per-collection error to the caller
+        logger.exception("collection %s failed for %s", action, collection_id or collection_name)
+        return CollectionEditResult(
+            action=action, collection_id=collection_id, collection_name=collection_name, ok=False, error=str(exc)
+        )
+
+
+@router.post("/bulk-edit", response_model=BulkEditResponse)
+async def bulk_edit(request: Request, body: BulkEditRequest) -> BulkEditResponse:
+    jellyfin = request.app.state.jellyfin
+    response = BulkEditResponse()
+
+    # Collection membership lives on the collection, not the item: skip the per-item
+    # metadata round-trip when only collections change.
+    if _has_item_edits(body):
+        sem = asyncio.Semaphore(settings.max_concurrent_updates)
+        response.items = list(
+            await asyncio.gather(*(_edit_one(request, item_id, body, sem) for item_id in body.item_ids))
+        )
+
+    ids = body.item_ids
+    for cid in body.remove_from_collections:
+        response.collections.append(
+            await _collection_op("remove", cid, None, lambda cid=cid: jellyfin.remove_from_collection(cid, ids))
+        )
+    for cid in body.add_to_collections:
+        response.collections.append(
+            await _collection_op("add", cid, None, lambda cid=cid: jellyfin.add_to_collection(cid, ids))
+        )
+    for name in (n.strip() for n in body.new_collections):
+        if name:
+            response.collections.append(
+                await _collection_op("create", None, name, lambda name=name: jellyfin.create_collection(name, ids))
+            )
+
+    request.app.state.library_cache.invalidate()
+    return response

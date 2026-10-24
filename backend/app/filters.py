@@ -12,6 +12,10 @@ def _eval_condition(cond: FilterCondition, movie: Movie) -> bool:
         has_tag = cond.value.lower() in (t.lower() for t in movie.tags)
         return has_tag if cond.op == "include" else not has_tag
 
+    if cond.field == "collection":
+        in_collection = cond.value.lower() in (c.name.lower() for c in movie.collections)
+        return in_collection if cond.op == "include" else not in_collection
+
     if cond.field == "officialRating":
         matches = (movie.official_rating or "") == cond.value
         return matches if cond.op == "include" else not matches

@@ -15,6 +15,7 @@ const FIELD_LABELS: Record<FilterField, string> = {
   tags: "Tag",
   officialRating: "Parental rating",
   dateCreated: "Date added",
+  collection: "Collection",
 };
 
 const OP_LABELS: Record<ConditionOp, string> = {
@@ -36,6 +37,12 @@ const PLACEHOLDERS: Record<FilterField, string> = {
   tags: "Tag name",
   officialRating: "e.g. PG-13",
   dateCreated: "",
+  collection: "Collection name",
+};
+
+/** <datalist> ids rendered by the app, used to suggest existing values. */
+const SUGGESTIONS: Partial<Record<FilterField, string>> = {
+  collection: "collection-names",
 };
 
 function ConditionRow({
@@ -88,6 +95,7 @@ function ConditionRow({
           type="text"
           aria-label="Value"
           placeholder={PLACEHOLDERS[node.field]}
+          list={SUGGESTIONS[node.field]}
           value={node.value}
           onChange={(e) => onChange({ ...node, value: e.target.value })}
         />

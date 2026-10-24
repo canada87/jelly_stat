@@ -54,3 +54,8 @@ Open the URL Vite prints (defaults to `http://localhost:5173`).
 - There is no native bulk-update endpoint in Jellyfin: the backend reads each item's full metadata,
   applies the tag/rating change, and writes it back, with limited concurrency
   (`MAX_CONCURRENT_UPDATES`, default 5).
+- Collections (Jellyfin BoxSets) can be filtered on, and the bulk-edit dialog can add the selected
+  movies to existing collections, create new collections with them, or remove them from
+  collections. Membership changes go through Jellyfin's `/Collections` endpoints, so they don't
+  rewrite the movies' own metadata. Loading the library makes one extra request per collection to
+  read its members.

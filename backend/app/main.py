@@ -5,10 +5,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from app.cache import MovieCache
+from app.cache import LibraryCache
 from app.config import settings
 from app.jellyfin_client import JellyfinClient
-from app.routers import bulk, movies
+from app.routers import bulk, collections, movies
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
@@ -16,7 +16,7 @@ STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     app.state.jellyfin = JellyfinClient(settings.jellyfin_url, settings.jellyfin_api_key)
-    app.state.movie_cache = MovieCache(settings.cache_ttl_seconds)
+    app.state.library_cache = LibraryCache(settings.cache_ttl_seconds)
     yield
     await app.state.jellyfin.aclose()
 
@@ -33,6 +33,7 @@ app.add_middleware(
 
 app.include_router(movies.router)
 app.include_router(bulk.router)
+app.include_router(collections.router)
 
 if STATIC_DIR.is_dir():
     app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")

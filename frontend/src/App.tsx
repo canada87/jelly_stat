@@ -1,10 +1,10 @@
-import { useState } from "react";
-import { filterMovies } from "./api/client";
+import { useEffect, useState } from "react";
+import { filterMovies, getCollections } from "./api/client";
 import BulkEditPanel from "./components/BulkEditPanel";
 import FilterBuilder from "./components/FilterBuilder";
 import { IconAlert, IconRefresh, IconSearch, Spinner } from "./components/Icons";
 import MovieTable from "./components/MovieTable";
-import type { FilterGroup, Movie } from "./types";
+import type { Collection, FilterGroup, Movie } from "./types";
 import { newGroup } from "./types";
 
 export default function App() {
@@ -14,6 +14,17 @@ export default function App() {
   const [filter, setFilter] = useState<FilterGroup>(newGroup("AND"));
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [hasSearched, setHasSearched] = useState(false);
+  const [collections, setCollections] = useState<Collection[]>([]);
+
+  // Only feeds suggestions and the bulk-edit picker; a failure here is non-fatal.
+  const loadCollections = () =>
+    getCollections()
+      .then(setCollections)
+      .catch(() => {});
+
+  useEffect(() => {
+    loadCollections();
+  }, []);
 
   const search = async (refresh = false) => {
     setLoading(refresh ? "refresh" : "search");
@@ -23,6 +34,7 @@ export default function App() {
       setMovies(data);
       setSelected(new Set());
       setHasSearched(true);
+      loadCollections();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -103,8 +115,15 @@ export default function App() {
         </main>
       </div>
 
+      <datalist id="collection-names">
+        {collections.map((c) => (
+          <option key={c.id} value={c.name} />
+        ))}
+      </datalist>
+
       <BulkEditPanel
-        selectedIds={[...selected]}
+        selectedMovies={movies.filter((m) => selected.has(m.id))}
+        collections={collections}
         onClear={() => setSelected(new Set())}
         onApplied={() => search(true)}
       />
