@@ -36,8 +36,10 @@ export default function BulkEditPanel({ selectedMovies, collections, onClear, on
   const [removeTags, setRemoveTags] = useState("");
   const [changeRating, setChangeRating] = useState(false);
   const [rating, setRating] = useState("");
-  // Collection names typed by the user: existing ones are added to, unknown ones are created.
-  const [addCollections, setAddCollections] = useState<string[]>([]);
+  const [addCollectionIds, setAddCollectionIds] = useState<Set<string>>(new Set());
+  const [collectionSearch, setCollectionSearch] = useState("");
+  // Names of collections to create with the selected movies in them.
+  const [newCollections, setNewCollections] = useState<string[]>([]);
   const [collectionInput, setCollectionInput] = useState("");
   const [removeCollectionIds, setRemoveCollectionIds] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
@@ -54,25 +56,29 @@ export default function BulkEditPanel({ selectedMovies, collections, onClear, on
     () => new Map(collections.map((c) => [c.name.toLowerCase(), c])),
     [collections]
   );
-  const existingToAdd = addCollections.flatMap((n) => collectionByName.get(n.toLowerCase()) ?? []);
-  const newToCreate = addCollections.filter((n) => !collectionByName.has(n.toLowerCase()));
+  const existingToAdd = collections.filter((c) => addCollectionIds.has(c.id));
 
-  // Collections at least one selected movie belongs to, with how many of the selection are in each.
-  const removable = useMemo(() => {
-    const counts = new Map<string, { id: string; name: string; count: number }>();
+  // How many of the selected movies are already in each collection.
+  const selectedCounts = useMemo(() => {
+    const counts = new Map<string, number>();
     for (const m of selectedMovies) {
-      for (const c of m.collections) {
-        const entry = counts.get(c.id) ?? { ...c, count: 0 };
-        entry.count++;
-        counts.set(c.id, entry);
-      }
+      for (const c of m.collections) counts.set(c.id, (counts.get(c.id) ?? 0) + 1);
     }
-    return [...counts.values()].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+    return counts;
   }, [selectedMovies]);
+  const removable = collections.filter((c) => selectedCounts.has(c.id));
   const toRemove = removable.filter((c) => removeCollectionIds.has(c.id));
 
+  const search = collectionSearch.trim().toLowerCase();
+  const visibleCollections = search ? collections.filter((c) => c.name.toLowerCase().includes(search)) : collections;
+
   const hasChanges =
-    add.length > 0 || remove.length > 0 || changeRating || addCollections.length > 0 || toRemove.length > 0;
+    add.length > 0 ||
+    remove.length > 0 ||
+    changeRating ||
+    existingToAdd.length > 0 ||
+    newCollections.length > 0 ||
+    toRemove.length > 0;
 
   useEffect(() => {
     const d = dialogRef.current;
@@ -94,22 +100,24 @@ export default function BulkEditPanel({ selectedMovies, collections, onClear, on
     setOpen(false);
   };
 
-  const pushCollection = () => {
-    const name = collectionInput.trim();
-    if (!name) return;
-    // Use the existing collection's exact spelling when the name matches one case-insensitively.
-    const canonical = collectionByName.get(name.toLowerCase())?.name ?? name;
-    if (!addCollections.some((n) => n.toLowerCase() === canonical.toLowerCase())) {
-      setAddCollections([...addCollections, canonical]);
-    }
-    setCollectionInput("");
-  };
-
-  const toggleRemove = (id: string) => {
-    const next = new Set(removeCollectionIds);
+  const toggleIn = (set: Set<string>, id: string) => {
+    const next = new Set(set);
     if (next.has(id)) next.delete(id);
     else next.add(id);
-    setRemoveCollectionIds(next);
+    return next;
+  };
+
+  const pushNewCollection = () => {
+    const name = collectionInput.trim();
+    if (!name) return;
+    // A name that matches an existing collection just ticks it instead of creating a duplicate.
+    const existing = collectionByName.get(name.toLowerCase());
+    if (existing) {
+      setAddCollectionIds(new Set(addCollectionIds).add(existing.id));
+    } else if (!newCollections.some((n) => n.toLowerCase() === name.toLowerCase())) {
+      setNewCollections([...newCollections, name]);
+    }
+    setCollectionInput("");
   };
 
   const collectionName = (r: CollectionEditResult) =>
@@ -126,7 +134,7 @@ export default function BulkEditPanel({ selectedMovies, collections, onClear, on
         official_rating: rating,
         change_rating: changeRating,
         add_to_collections: existingToAdd.map((c) => c.id),
-        new_collections: newToCreate,
+        new_collections: newCollections,
         remove_from_collections: toRemove.map((c) => c.id),
       });
       setResults(res);
@@ -135,7 +143,9 @@ export default function BulkEditPanel({ selectedMovies, collections, onClear, on
       setRemoveTags("");
       setChangeRating(false);
       setRating("");
-      setAddCollections([]);
+      setAddCollectionIds(new Set());
+      setCollectionSearch("");
+      setNewCollections([]);
       setCollectionInput("");
       setRemoveCollectionIds(new Set());
       onApplied();
@@ -254,47 +264,78 @@ export default function BulkEditPanel({ selectedMovies, collections, onClear, on
             </fieldset>
             <fieldset className="field">
               <legend>Collections</legend>
+              <span className="sub-label">Add to existing collections</span>
+              {collections.length === 0 ? (
+                <span className="help">No collections found in Jellyfin.</span>
+              ) : (
+                <>
+                  {collections.length > 8 && (
+                    <input
+                      type="search"
+                      aria-label="Search collections"
+                      placeholder="Search collections…"
+                      value={collectionSearch}
+                      onChange={(e) => setCollectionSearch(e.target.value)}
+                    />
+                  )}
+                  <div className="check-list">
+                    {visibleCollections.map((c) => {
+                      const inCount = selectedCounts.get(c.id) ?? 0;
+                      return (
+                        <label key={c.id} className="check">
+                          <input
+                            type="checkbox"
+                            checked={addCollectionIds.has(c.id)}
+                            onChange={() => setAddCollectionIds(toggleIn(addCollectionIds, c.id))}
+                          />
+                          {c.name}
+                          <span className="muted">
+                            ({c.movie_count} movie{c.movie_count === 1 ? "" : "s"}
+                            {inCount > 0 && `, ${inCount} of ${count} selected already in it`})
+                          </span>
+                        </label>
+                      );
+                    })}
+                    {visibleCollections.length === 0 && <span className="help">No collection matches.</span>}
+                  </div>
+                </>
+              )}
               <label htmlFor={`${titleId}-col`} className="sub-label">
-                Add to collections
+                Create a new collection
               </label>
               <div className="inline-input">
                 <input
                   id={`${titleId}-col`}
-                  list="collection-names"
                   value={collectionInput}
                   onChange={(e) => setCollectionInput(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
                       e.preventDefault();
-                      pushCollection();
+                      pushNewCollection();
                     }
                   }}
-                  placeholder="Existing or new collection name"
-                  aria-describedby={`${titleId}-col-help`}
+                  placeholder="New collection name"
                 />
                 <button
                   type="button"
                   className="btn btn-secondary"
-                  onClick={pushCollection}
+                  onClick={pushNewCollection}
                   disabled={!collectionInput.trim()}
                 >
                   <IconPlus /> Add
                 </button>
               </div>
-              <span id={`${titleId}-col-help`} className="help">
-                A name that doesn't match an existing collection creates a new one.
-              </span>
-              {addCollections.length > 0 && (
-                <ul className="chips" aria-label="Collections to add to">
-                  {addCollections.map((n) => (
+              {newCollections.length > 0 && (
+                <ul className="chips" aria-label="Collections to create">
+                  {newCollections.map((n) => (
                     <li key={n} className="chip chip-removable">
                       {n}
-                      {!collectionByName.has(n.toLowerCase()) && <span className="chip-badge">new</span>}
+                      <span className="chip-badge">new</span>
                       <button
                         type="button"
                         className="chip-remove"
-                        onClick={() => setAddCollections(addCollections.filter((x) => x !== n))}
-                        aria-label={`Don't add to ${n}`}
+                        onClick={() => setNewCollections(newCollections.filter((x) => x !== n))}
+                        aria-label={`Don't create ${n}`}
                       >
                         <IconClose />
                       </button>
@@ -312,11 +353,11 @@ export default function BulkEditPanel({ selectedMovies, collections, onClear, on
                       <input
                         type="checkbox"
                         checked={removeCollectionIds.has(c.id)}
-                        onChange={() => toggleRemove(c.id)}
+                        onChange={() => setRemoveCollectionIds(toggleIn(removeCollectionIds, c.id))}
                       />
                       {c.name}
                       <span className="muted">
-                        ({c.count} of {count} selected)
+                        ({selectedCounts.get(c.id)} of {count} selected)
                       </span>
                     </label>
                   ))}
@@ -371,7 +412,7 @@ export default function BulkEditPanel({ selectedMovies, collections, onClear, on
                   Add to collection <b>{c.name}</b>
                 </li>
               ))}
-              {newToCreate.map((n) => (
+              {newCollections.map((n) => (
                 <li key={`new-${n}`}>
                   Create collection <b>{n}</b> with these movies
                 </li>
